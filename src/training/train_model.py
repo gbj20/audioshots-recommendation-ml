@@ -26,13 +26,19 @@ class InteractionDataset(Dataset):
     def __init__(self, df):
         self.users = torch.tensor(df["user_idx"].values, dtype=torch.long)
         self.items = torch.tensor(df["item_idx"].values, dtype=torch.long)
+        self.languages = torch.tensor(df["language_idx"].values, dtype=torch.long)
         self.scores = torch.tensor(df["score"].values, dtype=torch.float32)
 
     def __len__(self):
         return len(self.scores)
 
     def __getitem__(self, idx):
-        return self.users[idx], self.items[idx], self.scores[idx]
+        return (
+            self.users[idx],
+            self.items[idx],
+            self.languages[idx],
+            self.scores[idx]
+        )
 
 
 # --------------------------------
@@ -49,7 +55,8 @@ print(f"Users: {num_users}, Items: {num_items}")
 dataset = InteractionDataset(df)
 dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
-model = NCF(num_users, num_items, EMBEDDING_DIM).to(DEVICE)
+num_languages = df["language_idx"].nunique()
+model = NCF(num_users, num_items, num_languages, EMBEDDING_DIM)
 criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
@@ -59,13 +66,14 @@ model.train()
 for epoch in range(EPOCHS):
     total_loss = 0.0
 
-    for user, item, score in dataloader:
+    for user, item, language, score in dataloader:
         user = user.to(DEVICE)
         item = item.to(DEVICE)
+        language = language.to(DEVICE)
         score = score.to(DEVICE)
 
         optimizer.zero_grad()
-        prediction = model(user, item)
+        prediction = model(user, item, language)
         loss = criterion(prediction, score)
 
         loss.backward()
