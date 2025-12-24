@@ -27,6 +27,7 @@ class InteractionDataset(Dataset):
         self.users = torch.tensor(df["user_idx"].values, dtype=torch.long)
         self.items = torch.tensor(df["item_idx"].values, dtype=torch.long)
         self.languages = torch.tensor(df["language_idx"].values, dtype=torch.long)
+        self.categories = torch.tensor(df["category_idx"].values, dtype=torch.long)
         self.scores = torch.tensor(df["score"].values, dtype=torch.float32)
 
     def __len__(self):
@@ -37,7 +38,8 @@ class InteractionDataset(Dataset):
             self.users[idx],
             self.items[idx],
             self.languages[idx],
-            self.scores[idx]
+            self.categories[idx],
+            self.scores[idx],
         )
 
 
@@ -56,7 +58,8 @@ dataset = InteractionDataset(df)
 dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
 num_languages = df["language_idx"].nunique()
-model = NCF(num_users, num_items, num_languages, EMBEDDING_DIM)
+num_categories = df["category_idx"].nunique()
+model = NCF(num_users, num_items, num_languages, num_categories, EMBEDDING_DIM)
 criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
@@ -66,14 +69,15 @@ model.train()
 for epoch in range(EPOCHS):
     total_loss = 0.0
 
-    for user, item, language, score in dataloader:
+    for user, item, language, category, score in dataloader:
         user = user.to(DEVICE)
         item = item.to(DEVICE)
         language = language.to(DEVICE)
+        category = category.to(DEVICE)
         score = score.to(DEVICE)
 
         optimizer.zero_grad()
-        prediction = model(user, item, language)
+        prediction = model(user, item, language, category)
         loss = criterion(prediction, score)
 
         loss.backward()
@@ -88,4 +92,4 @@ for epoch in range(EPOCHS):
 Path("models_saved").mkdir(exist_ok=True)
 torch.save(model.state_dict(), MODEL_PATH)
 
-print(f"✅ Model training complete. Saved at {MODEL_PATH}")
+print(f"Model training complete. Saved at {MODEL_PATH}")
