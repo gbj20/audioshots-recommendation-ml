@@ -43,9 +43,6 @@ class InteractionDataset(Dataset):
         )
 
 
-# --------------------------------
-# LOAD DATA
-# --------------------------------
 print("Loading training data...")
 df = pd.read_csv(DATA_PATH)
 

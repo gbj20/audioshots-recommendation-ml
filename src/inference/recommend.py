@@ -1,18 +1,13 @@
+from src.models.ncf_model import NCF
+import pickle
+import pandas as pd
+import torch
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(PROJECT_ROOT))
 
-import torch
-import pandas as pd
-import pickle
-
-from src.models.ncf_model import NCF
-
-# --------------------------------
-# CONFIG
-# --------------------------------
 MODEL_PATH = "models_saved/recommender.pt"
 DATA_PATH = "data/processed/ml_interactions.csv"
 
@@ -26,10 +21,6 @@ USER_CATEGORY_MAP_PATH = "data/processed/user_category_idx.csv"
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-
-# --------------------------------
-# LOAD MODEL & ENCODERS
-# --------------------------------
 def load_model():
     df = pd.read_csv(DATA_PATH)
 
@@ -74,11 +65,6 @@ def load_model():
         user_category_df,
         num_items
     )
-
-
-# --------------------------------
-# RECOMMEND FUNCTION
-# --------------------------------
 def recommend_for_user(user_id, top_k=10):
     (
         model,
@@ -107,7 +93,7 @@ def recommend_for_user(user_id, top_k=10):
         language_idx = lang_row.iloc[0]["language_idx"]
 
     # -------- Category ----------
-    cat_row = user_category_df[user_category_df["user_id"] == user_id]
+    cat_row = user_category_df[user_category_df["user_idx"] == user_id]
 
     if cat_row.empty:
         category_idx = torch.randint(
@@ -118,9 +104,12 @@ def recommend_for_user(user_id, top_k=10):
 
     # -------- Tensors ----------
     item_tensor = torch.arange(num_items, dtype=torch.long).to(DEVICE)
-    user_tensor = torch.full((num_items,), user_idx, dtype=torch.long).to(DEVICE)
-    language_tensor = torch.full((num_items,), language_idx, dtype=torch.long).to(DEVICE)
-    category_tensor = torch.full((num_items,), category_idx, dtype=torch.long).to(DEVICE)
+    user_tensor = torch.full((num_items,), user_idx,
+                             dtype=torch.long).to(DEVICE)
+    language_tensor = torch.full(
+        (num_items,), language_idx, dtype=torch.long).to(DEVICE)
+    category_tensor = torch.full(
+        (num_items,), category_idx, dtype=torch.long).to(DEVICE)
 
     with torch.no_grad():
         scores = model(
@@ -134,5 +123,3 @@ def recommend_for_user(user_id, top_k=10):
     recommended_audio_ids = item_encoder.inverse_transform(top_items)
 
     return recommended_audio_ids
-
-

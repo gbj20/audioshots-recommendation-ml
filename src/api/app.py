@@ -6,6 +6,7 @@ sys.path.append(str(PROJECT_ROOT))
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+import traceback
 
 from src.inference.recommend import recommend_for_user
 
@@ -23,6 +24,19 @@ def recommend(req: RecommendRequest):
             "recommended_audio_ids": audio_ids.tolist()
         }
     except ValueError as e:
+        # User not found or other validation error
+        print(f"ValueError: {str(e)}")
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Internal server error")
+        # Log the full error for debugging
+        print(f"Error occurred: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.get("/")
+def root():
+    return {"message": "AudioShots ML Recommendation Service is running"}
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
