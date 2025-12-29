@@ -23,9 +23,7 @@ ml_df = df[["user_idx", "item_idx", "language_idx", "score"]]
 Path("data/processed").mkdir(exist_ok=True)
 ml_df.to_csv("data/processed/ml_interactions.csv", index=False)
 
-# -----------------------------
-# Save encoders (VERY IMPORTANT)
-# -----------------------------
+# Save encoders 
 Path("models_saved").mkdir(exist_ok=True)
 
 with open("models_saved/user_encoder.pkl", "wb") as f:
@@ -38,7 +36,7 @@ with open("models_saved/language_encoder.pkl", "wb") as f:
     pickle.dump(language_encoder, f)
 
 
-print("✅ ML dataset created")
+print("ML dataset created")
 print("Users:", ml_df["user_idx"].nunique())
 print("Items:", ml_df["item_idx"].nunique())
 print(ml_df.head())

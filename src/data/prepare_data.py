@@ -37,4 +37,4 @@ interactions = interactions.groupby(
 # Save processed interactions
 interactions.to_csv("data/processed/interactions.csv", index=False)
 
-print("✅ interactions.csv created successfully")
+print("interactions.csv created successfully")
