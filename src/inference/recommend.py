@@ -21,6 +21,7 @@ USER_CATEGORY_MAP_PATH = "data/processed/user_category_idx.csv"
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+
 def load_model():
     df = pd.read_csv(DATA_PATH)
 
@@ -65,6 +66,8 @@ def load_model():
         user_category_df,
         num_items
     )
+
+
 def recommend_for_user(user_id, top_k=10):
     (
         model,
@@ -77,32 +80,32 @@ def recommend_for_user(user_id, top_k=10):
         num_items
     ) = load_model()
 
+    # 1️⃣ Convert user_id → user_idx
     if user_id not in user_encoder.classes_:
-        raise ValueError("User not found in training data")
+        raise ValueError("User not found")
 
     user_idx = user_encoder.transform([user_id])[0]
 
-    # -------- Language ----------
+    # 2️⃣ Language index
     lang_row = user_language_df[user_language_df["user_id"] == user_id]
 
     if lang_row.empty:
         language_idx = torch.randint(
-            0, len(language_encoder.classes_), (1,)
-        ).item()
+            0, len(language_encoder.classes_), (1,)).item()
     else:
-        language_idx = lang_row.iloc[0]["language_idx"]
+        language_id = lang_row.iloc[0]["language_id"]
+        language_idx = language_encoder.transform([language_id])[0]
 
-    # -------- Category ----------
-    cat_row = user_category_df[user_category_df["user_idx"] == user_id]
+    # 3️⃣ Category index (IMPORTANT FIX)
+    cat_row = user_category_df[user_category_df["user_idx"] == user_idx]
 
     if cat_row.empty:
         category_idx = torch.randint(
-            0, len(category_encoder.classes_), (1,)
-        ).item()
+            0, len(category_encoder.classes_), (1,)).item()
     else:
         category_idx = cat_row.iloc[0]["category_idx"]
 
-    # -------- Tensors ----------
+    # 4️⃣ Tensors
     item_tensor = torch.arange(num_items, dtype=torch.long).to(DEVICE)
     user_tensor = torch.full((num_items,), user_idx,
                              dtype=torch.long).to(DEVICE)
@@ -111,15 +114,10 @@ def recommend_for_user(user_id, top_k=10):
     category_tensor = torch.full(
         (num_items,), category_idx, dtype=torch.long).to(DEVICE)
 
+    # 5️⃣ Predict
     with torch.no_grad():
-        scores = model(
-            user_tensor,
-            item_tensor,
-            language_tensor,
-            category_tensor
-        )
+        scores = model(user_tensor, item_tensor,
+                       language_tensor, category_tensor)
 
     top_items = torch.topk(scores, top_k).indices.cpu().numpy()
-    recommended_audio_ids = item_encoder.inverse_transform(top_items)
-
-    return recommended_audio_ids
+    return item_encoder.inverse_transform(top_items)
