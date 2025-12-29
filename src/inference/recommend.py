@@ -80,13 +80,13 @@ def recommend_for_user(user_id, top_k=10):
         num_items
     ) = load_model()
 
-    # 1️⃣ Convert user_id → user_idx
+    # Convert user_id → user_idx
     if user_id not in user_encoder.classes_:
         raise ValueError("User not found")
 
     user_idx = user_encoder.transform([user_id])[0]
 
-    # 2️⃣ Language index
+    # Language index
     lang_row = user_language_df[user_language_df["user_id"] == user_id]
 
     if lang_row.empty:
@@ -96,7 +96,7 @@ def recommend_for_user(user_id, top_k=10):
         language_id = lang_row.iloc[0]["language_id"]
         language_idx = language_encoder.transform([language_id])[0]
 
-    # 3️⃣ Category index (IMPORTANT FIX)
+    # Category index 
     cat_row = user_category_df[user_category_df["user_idx"] == user_idx]
 
     if cat_row.empty:
@@ -105,7 +105,7 @@ def recommend_for_user(user_id, top_k=10):
     else:
         category_idx = cat_row.iloc[0]["category_idx"]
 
-    # 4️⃣ Tensors
+    # Tensors
     item_tensor = torch.arange(num_items, dtype=torch.long).to(DEVICE)
     user_tensor = torch.full((num_items,), user_idx,
                              dtype=torch.long).to(DEVICE)
@@ -114,7 +114,6 @@ def recommend_for_user(user_id, top_k=10):
     category_tensor = torch.full(
         (num_items,), category_idx, dtype=torch.long).to(DEVICE)
 
-    # 5️⃣ Predict
     with torch.no_grad():
         scores = model(user_tensor, item_tensor,
                        language_tensor, category_tensor)
