@@ -25,7 +25,6 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class HybridRecommender:
-    """Hybrid recommender with content filtering"""
     
     def __init__(self):
         # Load model and encoders
@@ -52,10 +51,6 @@ class HybridRecommender:
         
         # Load audio metadata
         audio_df = pd.read_csv(AUDIO_DATA_PATH)
-        
-        # Build item metadata lookup
-        # IMPORTANT: Don't group by audio_id because one audio can have multiple categories
-        # Instead, create multiple entries for each audio-category pair
         self.item_metadata = {}
         self.item_to_audio = {}  # Map item_idx -> audio_id
         
@@ -79,9 +74,7 @@ class HybridRecommender:
                     
                     self.item_to_audio[item_idx] = audio_id
     
-    def recommend(self, user_id, language, category, top_k=10):
-        """Recommend items filtered by language and category"""
-        
+    def recommend(self, user_id, language, category, top_k=10):        
         # Check if language and category are known to the encoders
         try:
             language_idx = self.language_encoder.transform([language])[0]
@@ -149,9 +142,9 @@ def validate():
     
     recommender = HybridRecommender()
     
-    print(f"✓ Model loaded successfully")
-    print(f"✓ Device: {DEVICE}")
-    print(f"✓ Item metadata loaded: {len(recommender.item_metadata)} items\n")
+    print(f"Model loaded successfully")
+    print(f"Device: {DEVICE}")
+    print(f"Item metadata loaded: {len(recommender.item_metadata)} items\n")
     
     # Build ground truth from audio metadata
     audio_df = pd.read_csv(AUDIO_DATA_PATH)
@@ -165,7 +158,7 @@ def validate():
         if pd.notna(audio_id) and pd.notna(language) and pd.notna(category):
             ground_truth[language][category].add(audio_id)
     
-    print(f"✓ Built ground truth for {len(ground_truth)} languages\n")
+    print(f"Built ground truth for {len(ground_truth)} languages\n")
     
     # Get available combinations
     available_combinations = []
@@ -175,7 +168,7 @@ def validate():
             if num_audios > 0:
                 available_combinations.append((language, category, num_audios))
     
-    print(f"✓ Found {len(available_combinations)} language-category combinations\n")
+    print(f"Found {len(available_combinations)} language-category combinations\n")
     
     # Interactive validation
     while True:
@@ -193,11 +186,11 @@ def validate():
         lang_input = input("Enter language name (or 'exit' to quit): ").strip()
         
         if lang_input.lower() == 'exit':
-            print("\n✓ Validation complete!\n")
+            print("\nValidation complete!\n")
             break
         
         if lang_input not in languages:
-            print(f"\n✗ Language '{lang_input}' not found!\n")
+            print(f"\nLanguage '{lang_input}' not found!\n")
             continue
         
         # Show categories
@@ -217,7 +210,7 @@ def validate():
             continue
         
         if cat_input not in categories:
-            print(f"\n✗ Category '{cat_input}' not found!\n")
+            print(f"\nCategory '{cat_input}' not found!\n")
             continue
         
         # Get recommendations
@@ -241,25 +234,24 @@ def validate():
         print(f"VALIDATION RESULTS")
         print(f"{'='*70}\n")
         
-        print(f"📊 Ground Truth Audio IDs    : {len(true_audio_ids)}")
-        print(f"🎯 Recommended Audio IDs     : {len(recommendations)}")
-        print(f"✓  Correct Recommendations   : {len(correct)}")
-        print(f"\n📈 Precision                 : {precision:.2%}")
-        print(f"📈 Recall                    : {recall:.2%}")
+        print(f"Ground Truth Audio IDs    : {len(true_audio_ids)}")
+        print(f"Recommended Audio IDs     : {len(recommendations)}")
+        print(f"Correct Recommendations   : {len(correct)}")
+        print(f"\nPrecision                 : {precision:.2%}")
+        print(f"Recall                    : {recall:.2%}")
         
         # Interpretation
-        print(f"\n{'─'*70}")
-        print("📝 RESULT:")
+        print("RESULT:")
         print(f"{'─'*70}")
         
         if precision == 1.0:
-            print("✅ PERFECT! All recommendations match the language-category filter!")
+            print("PERFECT! All recommendations match the language-category filter!")
         elif precision >= 0.9:
-            print("✅ EXCELLENT! Nearly all recommendations are correct!")
+            print("EXCELLENT! Nearly all recommendations are correct!")
         elif precision >= 0.7:
-            print("✓ GOOD! Most recommendations are correct.")
+            print("GOOD! Most recommendations are correct.")
         else:
-            print("⚠ Some recommendations don't match the filter.")
+            print("Some recommendations don't match the filter.")
         
         print()
         
@@ -276,14 +268,13 @@ def validate():
         
         another = input("Test another combination? (y/n): ").strip().lower()
         if another != 'y':
-            print("\n✓ Validation complete!\n")
+            print("\nValidation complete!\n")
             print("="*70 + "\n")
             break
 
 
 # ---------------- BATCH VALIDATION ----------------
 def batch_validate():
-    print("\n" + "="*70)
     print("BATCH VALIDATION - ALL COMBINATIONS")
     print("="*70 + "\n")
     
@@ -370,11 +361,11 @@ def batch_validate():
     print(f"{'─'*70}")
     
     if avg_precision >= 0.95:
-        print("✅ EXCELLENT! The hybrid recommender works perfectly!")
+        print(" EXCELLENT! The hybrid recommender works perfectly!")
     elif avg_precision >= 0.80:
-        print("✓ GOOD! The recommender filters correctly in most cases.")
+        print(" GOOD! The recommender filters correctly in most cases.")
     else:
-        print("⚠ There are some issues with filtering accuracy.")
+        print(" There are some issues with filtering accuracy.")
     
     # Show worst performers
     results_sorted = sorted(results, key=lambda x: x['precision'])

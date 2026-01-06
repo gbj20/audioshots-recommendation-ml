@@ -66,8 +66,6 @@ def load_model():
         user_category_df,
         num_items
     )
-
-
 def recommend_for_user(user_id, top_k=10):
     (
         model,
