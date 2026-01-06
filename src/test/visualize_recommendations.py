@@ -1,12 +1,6 @@
-"""
-Visualization Tool for Audio Recommendations
-This script shows the language and category distribution of recommended audios
-"""
-
 import sys
 from pathlib import Path
 
-# Add project root to path so we can import our modules
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(PROJECT_ROOT))
 
@@ -16,54 +10,40 @@ from collections import Counter
 import matplotlib.pyplot as plt
 from src.inference.recommend import recommend_for_user
 
-
 AUDIO_DATA_PATH = "data/processed/audio_language_category.csv"
 ITEM_ENCODER_PATH = "models_saved/item_encoder.pkl"
 USER_ENCODER_PATH = "models_saved/user_encoder.pkl"
 
 def load_data():
-    """Load audio metadata and encoders"""
     print("\n" + "="*70)
     print("LOADING DATA...")
     print("="*70 + "\n")
     
     # Load audio metadata (has language and category for each audio)
     audio_df = pd.read_csv(AUDIO_DATA_PATH)
-    print(f"✓ Loaded {len(audio_df)} audio metadata records")
+    print(f"Loaded {len(audio_df)} audio metadata records")
     
     # Load item encoder (converts audio_id to index and vice versa)
     with open(ITEM_ENCODER_PATH, "rb") as f:
         item_encoder = pickle.load(f)
-    print(f"✓ Loaded item encoder with {len(item_encoder.classes_)} items")
+    print(f"Loaded item encoder with {len(item_encoder.classes_)} items")
     
     # Load user encoder (to get list of users)
     with open(USER_ENCODER_PATH, "rb") as f:
         user_encoder = pickle.load(f)
-    print(f"✓ Loaded user encoder with {len(user_encoder.classes_)} users\n")
+    print(f"Loaded user encoder with {len(user_encoder.classes_)} users\n")
     
     return audio_df, item_encoder, user_encoder
 
-
-# ============================================
 # STEP 2: GET RECOMMENDATIONS FOR A USER
-# ============================================
+
 def get_recommendations_with_metadata(user_id, audio_df, top_k=10):
-    """
-    Get recommendations for a user and add language/category info
-    
-    Args:
-        user_id: The user to recommend for
-        audio_df: DataFrame with audio metadata
-        top_k: Number of recommendations
-        
-    Returns:
-        DataFrame with columns: audio_id, language, category
-    """
+
     print(f"Getting recommendations for user: {user_id}")
     
     # Get recommended audio IDs from the model
     recommended_audio_ids = recommend_for_user(user_id, top_k=top_k)
-    print(f"✓ Got {len(recommended_audio_ids)} recommendations\n")
+    print(f"Got {len(recommended_audio_ids)} recommendations\n")
     
     # Create a list to store results
     results = []
@@ -91,16 +71,7 @@ def get_recommendations_with_metadata(user_id, audio_df, top_k=10):
     
     return pd.DataFrame(results)
 
-
 def visualize_recommendations(recommendations_df, user_id):
-    """
-    Create visualizations showing language and category distribution
-    
-    Args:
-        recommendations_df: DataFrame with audio_id, language, category
-        user_id: The user ID (for the title)
-    """
-    print("="*70)
     print("VISUALIZATION")
     print("="*70 + "\n")
     
@@ -148,20 +119,17 @@ def visualize_recommendations(recommendations_df, user_id):
     
     plt.tight_layout()
     
-    # Save the figure
-    output_path = f"visualization_user_{user_id}.png"
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    print(f"✓ Visualization saved as: {output_path}")
+    # # Save the figure
+    # output_path = f"visualization_user_{user_id}.png"
+    # plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    # print(f"✓ Visualization saved as: {output_path}")
     
     # Show the plot
     plt.show()
 
-
-# ============================================
 # STEP 4: PRINT DETAILED TABLE
-# ============================================
+
 def print_detailed_table(recommendations_df):
-    """Print a nice table showing all recommendations"""
     print("\n" + "="*70)
     print("DETAILED RECOMMENDATIONS")
   
@@ -174,10 +142,8 @@ def print_detailed_table(recommendations_df):
     
     print("\n" + "="*70)
 
-
-# ============================================
 # MAIN FUNCTION
-# ============================================
+
 def main():
     """Main function to run the visualization"""
     
@@ -235,7 +201,7 @@ def main():
     # Create visualization
     visualize_recommendations(recommendations_df, user_id)
     
-    print("\n✓ Analysis complete!\n")
+    print("\nAnalysis complete!\n")
 
 
 if __name__ == "__main__":

@@ -41,8 +41,6 @@ class InteractionDataset(Dataset):
             self.scores[idx],
         )
 
-
-print("\n" + "="*70)
 print("TRAINING IMPROVED RECOMMENDATION MODEL")
 print("="*70 + "\n")
 
@@ -125,6 +123,6 @@ for epoch in range(EPOCHS):
 print("\n" + "="*70)
 print("TRAINING COMPLETE")
 print("="*70)
-print(f"\n✓ Best Loss: {best_loss:.4f}")
-print(f"✓ Model saved to: {MODEL_PATH}")
+print(f"\nBest Loss: {best_loss:.4f}")
+print(f"Model saved to: {MODEL_PATH}")
 

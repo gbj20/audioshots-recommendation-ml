@@ -8,16 +8,16 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(PROJECT_ROOT))
 
-MODEL_PATH = "models_saved/recommender.pt"
-DATA_PATH = "data/processed/ml_interactions.csv"
+MODEL_PATH = PROJECT_ROOT / "models_saved/recommender.pt"
+DATA_PATH = PROJECT_ROOT / "data/processed/ml_interactions.csv"
 
-USER_ENCODER_PATH = "models_saved/user_encoder.pkl"
-ITEM_ENCODER_PATH = "models_saved/item_encoder.pkl"
-LANGUAGE_ENCODER_PATH = "models_saved/language_encoder.pkl"
-CATEGORY_ENCODER_PATH = "models_saved/category_encoder.pkl"
+USER_ENCODER_PATH = PROJECT_ROOT / "models_saved/user_encoder.pkl"
+ITEM_ENCODER_PATH = PROJECT_ROOT / "models_saved/item_encoder.pkl"
+LANGUAGE_ENCODER_PATH = PROJECT_ROOT / "models_saved/language_encoder.pkl"
+CATEGORY_ENCODER_PATH = PROJECT_ROOT / "models_saved/category_encoder.pkl"
 
-USER_LANGUAGE_MAP_PATH = "data/processed/user_language_map.csv"
-USER_CATEGORY_MAP_PATH = "data/processed/user_category_idx.csv"
+USER_LANGUAGE_MAP_PATH = PROJECT_ROOT / "data/processed/user_language_map.csv"
+USER_CATEGORY_MAP_PATH = PROJECT_ROOT / "data/processed/user_category_idx.csv"
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

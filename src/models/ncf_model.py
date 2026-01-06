@@ -3,14 +3,6 @@ import torch.nn as nn
 
 
 class NCF(nn.Module):
-    """
-    Neural Collaborative Filtering with Content-Based Filtering
-
-    Key improvement: Items have FIXED language and category attributes.
-    This ensures the model learns that filtering by language/category 
-    actually filters the items, not just adds features.
-    """
-
     def __init__(self, num_users, num_items, num_languages, num_categories, embedding_dim=32):
         super().__init__()
 
@@ -56,12 +48,6 @@ class NCF(nn.Module):
 
 
 class ContentFilteredNCF(nn.Module):
-    """
-    ALTERNATIVE: More explicit content filtering
-
-    This version adds a filtering layer that explicitly checks
-    if the item matches the requested language/category.
-    """
 
     def __init__(self, num_users, num_items, num_languages, num_categories, embedding_dim=32):
         super().__init__()
@@ -99,14 +85,6 @@ class ContentFilteredNCF(nn.Module):
         )
 
     def set_item_metadata(self, item_languages, item_categories):
-        """
-        Set the language and category for each item.
-        Call this after creating the model.
-
-        Args:
-            item_languages: tensor of shape [num_items] with language index for each item
-            item_categories: tensor of shape [num_items] with category index for each item
-        """
         self.item_languages = item_languages
         self.item_categories = item_categories
 
