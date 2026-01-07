@@ -94,7 +94,7 @@ def recommend_for_user(user_id, top_k=10):
         language_id = lang_row.iloc[0]["language_id"]
         language_idx = language_encoder.transform([language_id])[0]
 
-    # Category index 
+    # Category index
     cat_row = user_category_df[user_category_df["user_idx"] == user_idx]
 
     if cat_row.empty:
@@ -118,3 +118,5 @@ def recommend_for_user(user_id, top_k=10):
 
     top_items = torch.topk(scores, top_k).indices.cpu().numpy()
     return item_encoder.inverse_transform(top_items)
+
+

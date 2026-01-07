@@ -14,7 +14,7 @@ DATA_PATH = "data/processed/ml_interactions.csv"
 MODEL_PATH = "models_saved/recommender.pt"
 
 BATCH_SIZE = 64
-EPOCHS = 15  # Increased epochs for better learning
+EPOCHS = 15
 LEARNING_RATE = 0.001
 EMBEDDING_DIM = 32
 
