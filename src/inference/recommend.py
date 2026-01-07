@@ -118,5 +118,3 @@ def recommend_for_user(user_id, top_k=10):
 
     top_items = torch.topk(scores, top_k).indices.cpu().numpy()
     return item_encoder.inverse_transform(top_items)
-
-
