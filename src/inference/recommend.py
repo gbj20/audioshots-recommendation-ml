@@ -393,6 +393,7 @@ import numpy as np
 MODEL_PATH = PROJECT_ROOT / "models_saved/recommender_improved.pt"
 DATA_PATH = PROJECT_ROOT / "data/processed/ml_interactions.csv"
 ITEM_METADATA_PATH = PROJECT_ROOT / "data/processed/item_metadata.csv"
+AUDIO_META_PATH = PROJECT_ROOT / "data/processed/audio_language_category.csv"
 
 USER_ENCODER_PATH = PROJECT_ROOT / "models_saved/user_encoder.pkl"
 ITEM_ENCODER_PATH = PROJECT_ROOT / "models_saved/item_encoder.pkl"
@@ -477,7 +478,7 @@ def recommend_for_user(user_id, top_k=10):
     """
     
     model, user_encoder, item_encoder, item_metadata, df = load_model_and_encoders()
-    audio_meta = pd.read_csv("data/processed/audio_language_category.csv")
+    audio_meta = pd.read_csv(AUDIO_META_PATH)
     
     # Handle unknown users
     if user_id not in user_encoder.classes_:
@@ -576,7 +577,8 @@ def recommend_with_details(user_id, top_k=10):
     """
     
     model, user_encoder, item_encoder, item_metadata, df = load_model_and_encoders()
-    audio_meta = pd.read_csv("data/processed/audio_language_category.csv")
+    audio_meta = pd.read_csv(AUDIO_META_PATH)
+
     
     if user_id not in user_encoder.classes_:
         print(f"⚠ User '{user_id}' not found (cold start)")
