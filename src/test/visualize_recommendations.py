@@ -6,203 +6,171 @@ sys.path.append(str(PROJECT_ROOT))
 
 import pandas as pd
 import pickle
-from collections import Counter
-import matplotlib.pyplot as plt
-from src.inference.recommend import recommend_for_user
+from src.inference.recommend import recommend_with_details
 
-AUDIO_DATA_PATH = "data/processed/audio_language_category.csv"
-ITEM_ENCODER_PATH = "models_saved/item_encoder.pkl"
 USER_ENCODER_PATH = "models_saved/user_encoder.pkl"
+DATA_PATH = "data/processed/ml_interactions.csv"
 
-def load_data():
-    print("\n" + "="*70)
-    print("LOADING DATA...")
-    print("="*70 + "\n")
+
+def visualize_user_recommendations(user_id, num_recommendations=10):
+    """Display recommendations for a single user with formatting"""
     
-    # Load audio metadata (has language and category for each audio)
-    audio_df = pd.read_csv(AUDIO_DATA_PATH)
-    print(f"Loaded {len(audio_df)} audio metadata records")
+    print("\n" + "="*100)
+    print(f"RECOMMENDATIONS FOR USER: {user_id}")
+    print("="*100)
     
-    # Load item encoder (converts audio_id to index and vice versa)
-    with open(ITEM_ENCODER_PATH, "rb") as f:
-        item_encoder = pickle.load(f)
-    print(f"Loaded item encoder with {len(item_encoder.classes_)} items")
+    # Get user's interaction history
+    df = pd.read_csv(DATA_PATH)
     
-    # Load user encoder (to get list of users)
     with open(USER_ENCODER_PATH, "rb") as f:
         user_encoder = pickle.load(f)
-    print(f"Loaded user encoder with {len(user_encoder.classes_)} users\n")
     
-    return audio_df, item_encoder, user_encoder
-
-# STEP 2: GET RECOMMENDATIONS FOR A USER
-
-def get_recommendations_with_metadata(user_id, audio_df, top_k=10):
-
-    print(f"Getting recommendations for user: {user_id}")
-    
-    # Get recommended audio IDs from the model
-    recommended_audio_ids = recommend_for_user(user_id, top_k=top_k)
-    print(f"Got {len(recommended_audio_ids)} recommendations\n")
-    
-    # Create a list to store results
-    results = []
-    
-    # For each recommended audio, find its language and category
-    for audio_id in recommended_audio_ids:
-        # Find this audio in the metadata
-        audio_info = audio_df[audio_df['audio_id'] == audio_id]
+    if user_id in user_encoder.classes_:
+        user_idx = user_encoder.transform([user_id])[0]
+        user_history = df[df['user_idx'] == user_idx]
         
-        if not audio_info.empty:
-            # Get the first row (in case audio has multiple categories)
-            info = audio_info.iloc[0]
-            results.append({
-                'audio_id': audio_id,
-                'language': info['language'],
-                'category': info['category']
-            })
+        print(f"\nUser History:")
+        print(f"  Total interactions: {len(user_history)}")
+        print(f"  Average score: {user_history['score'].mean():.2f}")
+        print(f"  Score distribution:")
+        for score, count in user_history['score'].value_counts().sort_index().items():
+            print(f"    Score {score}: {count} items")
+    
+    # Get recommendations
+    print(f"\n{'='*100}")
+    print(f"TOP {num_recommendations} RECOMMENDATIONS")
+    print(f"{'='*100}\n")
+    
+    recommendations = recommend_with_details(user_id, top_k=num_recommendations)
+    
+    if len(recommendations) == 0:
+        print("  ⚠ No recommendations available for this user\n")
+        return
+    
+    # Display recommendations in a nice format
+    for i, row in recommendations.iterrows():
+        print(f"#{i+1:2d} │ {row['title'][:60]:<60}")
+        print(f"    │ ID: {row['audio_id']:<25} │ Score: {row['predicted_score']:<8}")
+        print(f"    │ Language: {row['language']:<20} │ Category: {row['category']:<30}")
+        print(f"    {'─'*98}")
+    
+    print()
+
+
+def compare_recommendations_across_users(num_users=5, num_recs=5):
+    """Compare recommendations across multiple users"""
+    
+    print("\n" + "="*100)
+    print("COMPARING RECOMMENDATIONS ACROSS USERS")
+    print("="*100 + "\n")
+    
+    with open(USER_ENCODER_PATH, "rb") as f:
+        user_encoder = pickle.load(f)
+    
+    # Get sample users
+    num_users = min(num_users, len(user_encoder.classes_))
+    sample_user_indices = range(num_users)
+    sample_users = user_encoder.inverse_transform(sample_user_indices)
+    
+    for user_id in sample_users:
+        print(f"\nUser: {user_id}")
+        print("-"*100)
+        
+        recs = recommend_with_details(user_id, top_k=num_recs)
+        
+        if len(recs) > 0:
+            for i, row in recs.iterrows():
+                print(f"  {i+1}. {row['title'][:50]:<50} | {row['language']:<12} | {row['category']:<20}")
         else:
-            # If not found, mark as unknown
-            results.append({
-                'audio_id': audio_id,
-                'language': 'Unknown',
-                'category': 'Unknown'
-            })
+            print("  No recommendations")
     
-    return pd.DataFrame(results)
+    print("\n" + "="*100 + "\n")
 
-def visualize_recommendations(recommendations_df, user_id):
-    print("VISUALIZATION")
-    print("="*70 + "\n")
-    
-    # Count languages and categories
-    language_counts = Counter(recommendations_df['language'])
-    category_counts = Counter(recommendations_df['category'])
-    
-    # Create figure with 2 subplots side by side
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-    fig.suptitle(f'Recommendation Analysis for User: {user_id}', fontsize=16, fontweight='bold')
-    
-    # === LEFT PLOT: Language Distribution ===
-    languages = list(language_counts.keys())
-    lang_values = list(language_counts.values())
-    colors1 = plt.cm.Set3(range(len(languages)))
-    
-    ax1.bar(languages, lang_values, color=colors1, edgecolor='black')
-    ax1.set_xlabel('Language', fontsize=12, fontweight='bold')
-    ax1.set_ylabel('Number of Recommendations', fontsize=12, fontweight='bold')
-    ax1.set_title('Distribution by Language', fontsize=14)
-    ax1.grid(axis='y', alpha=0.3)
-    
-    # Add value labels on bars
-    for i, v in enumerate(lang_values):
-        ax1.text(i, v + 0.1, str(v), ha='center', va='bottom', fontweight='bold')
-    
-    # === RIGHT PLOT: Category Distribution ===
-    categories = list(category_counts.keys())
-    cat_values = list(category_counts.values())
-    colors2 = plt.cm.Pastel1(range(len(categories)))
-    
-    ax2.bar(categories, cat_values, color=colors2, edgecolor='black')
-    ax2.set_xlabel('Category', fontsize=12, fontweight='bold')
-    ax2.set_ylabel('Number of Recommendations', fontsize=12, fontweight='bold')
-    ax2.set_title('Distribution by Category', fontsize=14)
-    ax2.grid(axis='y', alpha=0.3)
-    
-    # Rotate category labels if too many
-    if len(categories) > 3:
-        ax2.tick_params(axis='x', rotation=45)
-    
-    # Add value labels on bars
-    for i, v in enumerate(cat_values):
-        ax2.text(i, v + 0.1, str(v), ha='center', va='bottom', fontweight='bold')
-    
-    plt.tight_layout()
-    
-    # # Save the figure
-    # output_path = f"visualization_user_{user_id}.png"
-    # plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    # print(f"✓ Visualization saved as: {output_path}")
-    
-    # Show the plot
-    plt.show()
 
-# STEP 4: PRINT DETAILED TABLE
-
-def print_detailed_table(recommendations_df):
-    print("\n" + "="*70)
-    print("DETAILED RECOMMENDATIONS")
-  
+def analyze_recommendation_diversity():
+    """Analyze diversity of recommendations across all users"""
     
-    print(f"{'No.':<5} {'Audio ID':<30} {'Language':<15} {'Category':<20}")
-    print("-"*70)
+    print("\n" + "="*100)
+    print("ANALYZING RECOMMENDATION DIVERSITY")
+    print("="*100 + "\n")
     
-    for idx, row in recommendations_df.iterrows():
-        print(f"{idx+1:<5} {row['audio_id']:<30} {row['language']:<15} {row['category']:<20}")
+    with open(USER_ENCODER_PATH, "rb") as f:
+        user_encoder = pickle.load(f)
     
-    print("\n" + "="*70)
-
-# MAIN FUNCTION
-
-def main():
-    """Main function to run the visualization"""
+    all_recommended_items = set()
+    language_distribution = {}
+    category_distribution = {}
     
-    print("\n" + "="*70)
-    print("AUDIO RECOMMENDATION VISUALIZER")
-    print("="*70)
+    num_users_to_test = min(20, len(user_encoder.classes_))
     
-    # Load data
-    audio_df, item_encoder, user_encoder = load_data()
+    print(f"Testing recommendations for {num_users_to_test} users...\n")
     
-    # Get list of available users
-    available_users = user_encoder.classes_
+    for i in range(num_users_to_test):
+        user_id = user_encoder.inverse_transform([i])[0]
+        recs = recommend_with_details(user_id, top_k=10)
+        
+        if len(recs) > 0:
+            all_recommended_items.update(recs['audio_id'].values)
+            
+            for lang in recs['language'].values:
+                language_distribution[lang] = language_distribution.get(lang, 0) + 1
+            
+            for cat in recs['category'].values:
+                category_distribution[cat] = category_distribution.get(cat, 0) + 1
     
-    print("="*70)
-    print("AVAILABLE USERS")
-    print("="*70 + "\n")
-    print(f"Total users in system: {len(available_users)}")
-    print(f"First 5 user IDs: {list(available_users[:5])}\n")
-    
-    # Let user choose which user to analyze
-    print("Enter a user ID to analyze (or press Enter to use the first user):")
-    user_input = input("> ").strip()
-    
-    if user_input == "":
-        user_id = available_users[0]
-        print(f"Using default user: {user_id}\n")
-    elif user_input in available_users:
-        user_id = user_input
-    else:
-        print(f"⚠ User '{user_input}' not found. Using default user: {available_users[0]}\n")
-        user_id = available_users[0]
-    
-    # Get recommendations with metadata
-    recommendations_df = get_recommendations_with_metadata(user_id, audio_df, top_k=10)
-    
-    # Print detailed table
-    print_detailed_table(recommendations_df)
-    
-    # Print summary statistics
-    print("\nSUMMARY STATISTICS")
-    print("-"*70)
-    print(f"Total recommendations: {len(recommendations_df)}")
-    print(f"Unique languages: {recommendations_df['language'].nunique()}")
-    print(f"Unique categories: {recommendations_df['category'].nunique()}")
-    
-    print("\nLanguage breakdown:")
-    for lang, count in recommendations_df['language'].value_counts().items():
-        print(f"  • {lang}: {count}")
-    
-    print("\nCategory breakdown:")
-    for cat, count in recommendations_df['category'].value_counts().items():
-        print(f"  • {cat}: {count}")
+    print(f"DIVERSITY METRICS:")
+    print(f"  Unique items recommended: {len(all_recommended_items)}")
     print()
     
-    # Create visualization
-    visualize_recommendations(recommendations_df, user_id)
+    print(f"LANGUAGE DISTRIBUTION IN RECOMMENDATIONS:")
+    for lang, count in sorted(language_distribution.items(), key=lambda x: x[1], reverse=True)[:10]:
+        print(f"  {lang:<20}: {count:>4} times")
+    print()
     
-    print("\nAnalysis complete!\n")
+    print(f"CATEGORY DISTRIBUTION IN RECOMMENDATIONS:")
+    for cat, count in sorted(category_distribution.items(), key=lambda x: x[1], reverse=True)[:10]:
+        print(f"  {cat:<30}: {count:>4} times")
+    print()
+    
+    print("="*100 + "\n")
 
 
 if __name__ == "__main__":
-    main()
+    print("\n" + "="*100)
+    print("RECOMMENDATION VISUALIZATION TOOL")
+    print("="*100)
+    
+    # Load user encoder to get sample users
+    with open(USER_ENCODER_PATH, "rb") as f:
+        user_encoder = pickle.load(f)
+    
+    # Show menu
+    print("\nOptions:")
+    print("  1. View detailed recommendations for specific users")
+    print("  2. Compare recommendations across multiple users")
+    print("  3. Analyze recommendation diversity")
+    print("  4. All of the above")
+    
+    choice = input("\nEnter choice (1-4) [default=4]: ").strip() or "4"
+    
+    if choice == "1":
+        # Get first user as example
+        user_id = user_encoder.inverse_transform([0])[0]
+        visualize_user_recommendations(user_id, num_recommendations=10)
+    
+    elif choice == "2":
+        compare_recommendations_across_users(num_users=5, num_recs=5)
+    
+    elif choice == "3":
+        analyze_recommendation_diversity()
+    
+    else:  # choice == "4" or anything else
+        # Show everything
+        user_id = user_encoder.inverse_transform([0])[0]
+        visualize_user_recommendations(user_id, num_recommendations=10)
+        compare_recommendations_across_users(num_users=5, num_recs=5)
+        analyze_recommendation_diversity()
+    
+    print("="*100)
+    print("Visualization complete!")
+    print("="*100 + "\n")

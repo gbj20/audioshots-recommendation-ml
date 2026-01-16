@@ -21,7 +21,7 @@ def recommend(req: RecommendRequest):
     try:
         audio_ids = recommend_for_user(req.user_id, req.limit)
         return {
-            "recommended_audio_ids": audio_ids.tolist()
+            "recommended_audio_ids": audio_ids
         }
     except ValueError as e:
         # User not found or other validation error

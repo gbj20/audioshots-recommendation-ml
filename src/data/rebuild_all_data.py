@@ -1,177 +1,137 @@
-import sys
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-sys.path.append(str(PROJECT_ROOT))
-
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
+from pathlib import Path
 import pickle
 
 print("\n" + "="*80)
-print("REBUILDING TRAINING DATA - COMPLETE PIPELINE WITH PLAYLIST SIGNALS")
+print("REBUILDING DATA - INCLUDING ALL 132 USERS")
 print("="*80 + "\n")
 
-# ---------------- STEP 1: Load All Raw Data ----------------
 print("STEP 1: LOADING RAW DATA")
 print("-"*80)
 
+users_df = pd.read_csv("data/raw/AudioShots_UAT.users.csv")
 audio_df = pd.read_csv("data/raw/AudioShots_UAT.audios.csv")
 likes_df = pd.read_csv("data/raw/AudioShots_UAT.likes.csv")
 progress_df = pd.read_csv("data/raw/AudioShots_UAT.listeningprogresses.csv")
-users_df = pd.read_csv("data/raw/AudioShots_UAT.users.csv")
 
+print(f"Loaded {len(users_df)} users (ALL USERS)")
 print(f"Loaded {len(audio_df)} audios")
 print(f"Loaded {len(likes_df)} likes")
-print(f"Loaded {len(progress_df)} listening progress records")
-print(f"Loaded {len(users_df)} users")
+print(f"Loaded {len(progress_df)} listening progress records\n")
 
-# Load playlist signals
-has_playlist_data = False
-playlist_df = pd.DataFrame(columns=['user_id', 'audio_id', 'playlist_add_score'])
-
-try:
-    playlist_df = pd.read_csv("data/processed/playlist_signals.csv")
-    if len(playlist_df) > 0:
-        has_playlist_data = True
-        print(f"Loaded {len(playlist_df)} playlist signals")
-    else:
-        print("Playlist signals file is empty")
-except FileNotFoundError:
-    print("WARNING: playlist_signals.csv not found - will proceed without playlist data")
-
-# Debug: Show column names
-print(f"\nLikes columns: {list(likes_df.columns)}")
-print(f"Progress columns: {list(progress_df.columns)}")
-if has_playlist_data:
-    print(f"Playlist columns: {list(playlist_df.columns)}")
-print()
-
-# ---------------- STEP 2: Build Audio-Language-Category Mapping ----------------
-print("STEP 2: BUILDING AUDIO-LANGUAGE-CATEGORY MAPPING")
+print("STEP 2: BUILDING AUDIO METADATA")
 print("-"*80)
 
-audio_lang_cat_rows = []
+audio_metadata = []
 
 for idx, row in audio_df.iterrows():
     audio_id = row.get('_id')
-    title = row.get('title', '')
-    language = row.get('language.name', None)
-    
     if pd.isna(audio_id):
         continue
     
-    # Get all categories (up to 5)
-    categories = []
+    title = row.get('title', '')
+    language = row.get('language.name', 'Unknown')
+    
+    # Get first non-null category
+    category = None
     for i in range(5):
         cat = row.get(f'categories[{i}].name', None)
         if pd.notna(cat) and str(cat).strip():
-            categories.append(str(cat).strip())
+            category = str(cat).strip()
+            break
     
-    # Create one row per category
-    if categories:
-        for category in categories:
-            audio_lang_cat_rows.append({
-                'audio_id': audio_id,
-                'title': title,
-                'language': language if pd.notna(language) else 'Unknown',
-                'category': category
-            })
-    else:
-        # Even if no category, include the audio
-        audio_lang_cat_rows.append({
-            'audio_id': audio_id,
-            'title': title,
-            'language': language if pd.notna(language) else 'Unknown',
-            'category': 'General'
-        })
+    if not category:
+        category = 'General'
+    
+    audio_metadata.append({
+        'audio_id': str(audio_id),
+        'title': title,
+        'language': language if pd.notna(language) else 'Unknown',
+        'category': category
+    })
 
-audio_lc_df = pd.DataFrame(audio_lang_cat_rows)
-audio_lc_df.to_csv("data/processed/audio_language_category.csv", index=False)
+audio_meta_df = pd.DataFrame(audio_metadata)
 
-print(f"Created {len(audio_lc_df)} audio-language-category mappings")
-print(f"Unique audio IDs: {audio_lc_df['audio_id'].nunique()}")
-print(f"Languages: {audio_lc_df['language'].nunique()}")
-print(f"Categories: {audio_lc_df['category'].nunique()}")
-print(f"Saved to: data/processed/audio_language_category.csv\n")
+print(f"Created metadata for {len(audio_meta_df)} audios")
+print(f"Unique languages: {audio_meta_df['language'].nunique()}")
+print(f"Unique categories: {audio_meta_df['category'].nunique()}\n")
 
-# ---------------- STEP 3: Build Interactions from Likes ----------------
-print("STEP 3: BUILDING INTERACTIONS FROM LIKES")
+# Save audio metadata
+Path("data/processed").mkdir(exist_ok=True)
+audio_meta_df.to_csv("data/processed/audio_language_category.csv", index=False)
+print("Saved: data/processed/audio_language_category.csv\n")
+
+print("STEP 3: EXTRACTING LIKE INTERACTIONS")
 print("-"*80)
 
-# Find correct column names for user_id and audio_id in likes
-user_col_likes = None
-audio_col_likes = None
+user_col = None
+audio_col = None
 
 for col in likes_df.columns:
     if 'user' in col.lower() and 'id' in col.lower():
-        user_col_likes = col
+        user_col = col
     if 'audio' in col.lower() and 'id' in col.lower():
-        audio_col_likes = col
+        audio_col = col
 
-print(f"Likes user column: {user_col_likes}")
-print(f"Audio column in likes: {audio_col_likes}")
+print(f"User column: {user_col}")
+print(f"Audio column: {audio_col}")
 
-interactions_from_likes = []
+interactions_likes = []
 
-if user_col_likes and audio_col_likes:
+if user_col and audio_col:
     for idx, row in likes_df.iterrows():
-        user_id = row.get(user_col_likes)
-        audio_id = row.get(audio_col_likes)
+        user_id = row.get(user_col)
+        audio_id = row.get(audio_col)
         
         if pd.notna(user_id) and pd.notna(audio_id):
-            interactions_from_likes.append({
+            interactions_likes.append({
                 'user_id': str(user_id),
                 'audio_id': str(audio_id),
                 'score': 5.0
             })
-    print(f"Created {len(interactions_from_likes)} interactions from likes\n")
-else:
-    print(f"Could not find user/audio columns in likes\n")
 
-# ---------------- STEP 4: Build Interactions from Listening Progress ----------------
-print("STEP 4: BUILDING INTERACTIONS FROM LISTENING PROGRESS")
+print(f"Extracted {len(interactions_likes)} like interactions\n")
+
+print("STEP 4: EXTRACTING LISTENING PROGRESS INTERACTIONS")
 print("-"*80)
 
-# Find correct column names
-user_col_progress = None
-audio_col_progress = None
+user_col = None
+audio_col = None
 progress_col = None
 duration_col = None
 
 for col in progress_df.columns:
     if 'user' in col.lower() and 'id' in col.lower():
-        user_col_progress = col
+        user_col = col
     if 'audio' in col.lower() and 'id' in col.lower():
-        audio_col_progress = col
+        audio_col = col
     if col.lower() == 'progress':
         progress_col = col
     if col.lower() == 'duration':
         duration_col = col
 
-print(f"User column in progress: {user_col_progress}")
-print(f"Audio column in progress: {audio_col_progress}")
+print(f"User column: {user_col}")
+print(f"Audio column: {audio_col}")
 print(f"Progress column: {progress_col}")
 print(f"Duration column: {duration_col}")
 
-interactions_from_progress = []
+interactions_progress = []
 
-if user_col_progress and audio_col_progress:
+if user_col and audio_col:
     for idx, row in progress_df.iterrows():
-        user_id = row.get(user_col_progress)
-        audio_id = row.get(audio_col_progress)
+        user_id = row.get(user_col)
+        audio_id = row.get(audio_col)
         progress = row.get(progress_col, 0) if progress_col else 0
         duration = row.get(duration_col, 0) if duration_col else 0
         
         if pd.notna(user_id) and pd.notna(audio_id):
-            # Calculate completion percentage
             if duration > 0:
                 completion = min(progress / duration, 1.0)
             else:
                 completion = 0
             
-            # Score based on completion
             if completion >= 0.8:
                 score = 5.0
             elif completion >= 0.6:
@@ -183,270 +143,253 @@ if user_col_progress and audio_col_progress:
             else:
                 score = 1.0
             
-            interactions_from_progress.append({
+            interactions_progress.append({
                 'user_id': str(user_id),
                 'audio_id': str(audio_id),
                 'score': score
             })
-    print(f"Created {len(interactions_from_progress)} interactions from listening progress\n")
-else:
-    print(f"Could not find user/audio columns in progress\n")
 
-# ---------------- STEP 5: Build Interactions from Playlist Adds ----------------
-print("STEP 5: BUILDING INTERACTIONS FROM PLAYLIST ADDS")
+print(f"Extracted {len(interactions_progress)} listening interactions\n")
+
+
+print("STEP 5: LOADING PLAYLIST SIGNALS")
 print("-"*80)
 
-interactions_from_playlists = []
+interactions_playlist = []
 
-if has_playlist_data:
-    for idx, row in playlist_df.iterrows():
-        user_id = row.get('user_id')
-        audio_id = row.get('audio_id')
-        score = row.get('playlist_add_score', 6.0)
-        
-        if pd.notna(user_id) and pd.notna(audio_id) and str(user_id) != 'unknown' and str(audio_id) != 'unknown':
-            interactions_from_playlists.append({
-                'user_id': str(user_id),
-                'audio_id': str(audio_id),
-                'score': float(score)
-            })
-    print(f"Created {len(interactions_from_playlists)} interactions from playlist adds\n")
-else:
-    print("No playlist data available\n")
-
-# ---------------- STEP 6: Combine Interactions ----------------
+try:
+    playlist_df = pd.read_csv("data/processed/playlist_signals.csv")
+    if len(playlist_df) > 0:
+        for idx, row in playlist_df.iterrows():
+            user_id = row.get('user_id')
+            audio_id = row.get('audio_id')
+            score = row.get('playlist_add_score', 6.0)
+            
+            if pd.notna(user_id) and pd.notna(audio_id) and str(user_id) != 'unknown':
+                interactions_playlist.append({
+                    'user_id': str(user_id),
+                    'audio_id': str(audio_id),
+                    'score': float(score)
+                })
+        print(f"Loaded {len(interactions_playlist)} playlist interactions\n")
+    else:
+        print("Playlist signals file is empty\n")
+except FileNotFoundError:
+    print("No playlist signals found - continuing without them\n")
 print("STEP 6: COMBINING ALL INTERACTIONS")
 print("-"*80)
 
-# Combine all interactions
-all_interactions = interactions_from_likes + interactions_from_progress + interactions_from_playlists
+all_interactions = interactions_likes + interactions_progress + interactions_playlist
 
-print(f"Interactions breakdown:")
-print(f"  • From likes: {len(interactions_from_likes)}")
-print(f"  • From progress: {len(interactions_from_progress)}")
-print(f"  • From playlists: {len(interactions_from_playlists)}")
+print(f"Interaction breakdown:")
+print(f"  • From likes: {len(interactions_likes)}")
+print(f"  • From progress: {len(interactions_progress)}")
+print(f"  • From playlists: {len(interactions_playlist)}")
 print(f"  • Total: {len(all_interactions)}\n")
 
 if len(all_interactions) == 0:
-    print("WARNING: No real interactions found!")
-    print("Will create synthetic interactions for all audios\n")
-    
-    # Create a minimal interactions dataframe
-    interactions_df = pd.DataFrame(columns=['user_id', 'audio_id', 'score'])
-else:
-    interactions_df = pd.DataFrame(all_interactions)
-    
-    # Deduplicate: if same user-audio pair, keep max score
-    interactions_df = interactions_df.groupby(['user_id', 'audio_id'], as_index=False)['score'].max()
-    
-    print(f"Total interactions after deduplication: {len(interactions_df)}")
-    print(f"Unique users: {interactions_df['user_id'].nunique()}")
-    print(f"Unique audios: {interactions_df['audio_id'].nunique()}")
-    print(f"\nScore distribution:")
-    print(interactions_df['score'].value_counts().sort_index())
-    print()
+    raise ValueError("ERROR: No interactions found! Cannot train model without user data.")
+
+interactions_df = pd.DataFrame(all_interactions)
+
+# Deduplicate - keep max score per user-audio pair
+interactions_df = interactions_df.groupby(['user_id', 'audio_id'], as_index=False)['score'].max()
+
+print(f"After deduplication: {len(interactions_df)} interactions")
+print(f"Unique users with interactions: {interactions_df['user_id'].nunique()}")
+print(f"Unique audios: {interactions_df['audio_id'].nunique()}\n")
+
+print("STEP 7: MERGING WITH AUDIO METADATA")
+print("-"*80)
+
+interactions_df = interactions_df.merge(
+    audio_meta_df[['audio_id', 'language', 'category']],
+    on='audio_id',
+    how='inner'
+)
+
+print(f"After merging: {len(interactions_df)} interactions")
+print(f"Users: {interactions_df['user_id'].nunique()}")
+print(f"Audios: {interactions_df['audio_id'].nunique()}\n")
+
+print("STEP 8: FILTERING TRAINING USERS (>= 1 interaction)")
+print("-"*80)
+
+user_counts = interactions_df['user_id'].value_counts()
+users_before = len(user_counts)
+
+# CHANGED: Include users with 1+ interactions
+valid_users = user_counts[user_counts >= 1].index
+interactions_df = interactions_df[interactions_df['user_id'].isin(valid_users)]
+
+users_after = interactions_df['user_id'].nunique()
+
+print(f"Users with 0 interactions removed: {users_before - users_after}")
+print(f"Users included in training: {users_after}")
+print(f"Remaining interactions: {len(interactions_df)}\n")
 
 # Save basic interactions
 interactions_df.to_csv("data/processed/interactions.csv", index=False)
-print(f"Saved to: data/processed/interactions.csv\n")
+print("Saved: data/processed/interactions.csv\n")
 
-# ---------------- STEP 7: Create Synthetic Interactions for All Audios ----------------
-print("STEP 7: CREATING SYNTHETIC INTERACTIONS FOR ALL AUDIOS")
+print("STEP 9: ENCODING DATA - INCLUDING ALL USERS")
 print("-"*80)
 
-# Get all audio IDs
-all_audio_ids = audio_lc_df['audio_id'].unique()
+# Get ALL user IDs from raw users.csv
+user_id_col = '_id'
+all_user_ids = users_df[user_id_col].astype(str).tolist()
 
-# Get or create users
-if len(interactions_df) > 0 and 'user_id' in interactions_df.columns:
-    # Use existing users
-    available_users = interactions_df['user_id'].unique()
-    print(f"Using {len(available_users)} existing users from interactions")
-else:
-    # Create synthetic users from users table
-    if len(users_df) > 0:
-        # Look for _id or userId column
-        user_id_col = None
-        for col in users_df.columns:
-            if col == '_id' or 'userId' in col or 'user_id' in col:
-                user_id_col = col
-                break
-        
-        if user_id_col:
-            available_users = users_df[user_id_col].dropna().unique()
-            print(f"Using {len(available_users)} users from users table")
-        else:
-            # Create generic users
-            available_users = [f"synthetic_user_{i}" for i in range(min(10, len(users_df)))]
-            print(f"Created {len(available_users)} synthetic users")
-    else:
-        # Create generic users
-        available_users = [f"synthetic_user_{i}" for i in range(10)]
-        print(f"Created {len(available_users)} synthetic users")
+# CRITICAL FIX: Get unique user IDs from interactions too
+users_in_interactions = interactions_df['user_id'].unique().tolist()
 
-# Create one interaction per audio with language and category
-print(f"\nCreating synthetic interactions for {len(all_audio_ids)} audios...")
+# Combine both sets - this ensures ALL users are included
+all_unique_users = list(set(all_user_ids) | set(users_in_interactions))
+all_unique_users.sort()  # Sort for consistency
 
-synthetic_rows = []
-for audio_id in all_audio_ids:
-    # Get language and category for this audio (take first row if multiple)
-    audio_info = audio_lc_df[audio_lc_df['audio_id'] == audio_id].iloc[0]
-    
-    # Assign to a random user
-    user = np.random.choice(available_users)
-    
-    synthetic_rows.append({
-        'user_id': str(user),
-        'audio_id': str(audio_id),
-        'score': 3.0,  # Neutral score
-        'language': audio_info['language'],
-        'category': audio_info['category']
-    })
+print(f"Total users from raw data: {len(all_user_ids)}")
+print(f"Users with interactions: {len(users_in_interactions)}")
+print(f"Combined unique users: {len(all_unique_users)}\n")
 
-synthetic_df = pd.DataFrame(synthetic_rows)
+# Debug: Check if interaction users are in raw data
+users_only_in_interactions = set(users_in_interactions) - set(all_user_ids)
+if users_only_in_interactions:
+    print(f"  WARNING: {len(users_only_in_interactions)} users found in interactions but NOT in users.csv")
+    print(f"  Sample: {list(users_only_in_interactions)[:3]}")
+    print(f"  These will still be included in the encoder\n")
 
-# Combine with real interactions if any
-if len(interactions_df) > 0:
-    # Merge with language-category info
-    interactions_enriched = interactions_df.merge(
-        audio_lc_df[['audio_id', 'language', 'category']].drop_duplicates('audio_id'),
-        on='audio_id',
-        how='left'
-    )
-    
-    # Combine with synthetic
-    enriched = pd.concat([interactions_enriched, synthetic_df], ignore_index=True)
-    
-    # Deduplicate again (keep max score)
-    enriched = enriched.groupby(['user_id', 'audio_id'], as_index=False).agg({
-        'score': 'max',
-        'language': 'first',
-        'category': 'first'
-    })
-else:
-    enriched = synthetic_df
-
-# Fill any missing language/category
-enriched['language'] = enriched['language'].fillna('Unknown')
-enriched['category'] = enriched['category'].fillna('General')
-
-print(f"\nTotal enriched interactions: {len(enriched)}")
-print(f"Covering {enriched['audio_id'].nunique()} unique audios")
-print(f"Using {enriched['user_id'].nunique()} unique users\n")
-
-# ---------------- STEP 8: Encode Everything ----------------
-print("STEP 8: ENCODING ALL DATA")
-print("-"*80)
-
-# Create encoders
+# Create user encoder with ALL users (from both sources)
 user_encoder = LabelEncoder()
+user_encoder.fit(all_unique_users)  # ← FIT ON ALL UNIQUE USERS
+
+print(f"User encoder classes: {len(user_encoder.classes_)}")
+
+# Now encode the interactions (only for users with data)
 item_encoder = LabelEncoder()
 language_encoder = LabelEncoder()
 category_encoder = LabelEncoder()
 
-# Fit encoders
-enriched['user_idx'] = user_encoder.fit_transform(enriched['user_id'])
-enriched['item_idx'] = item_encoder.fit_transform(enriched['audio_id'])
-enriched['language_idx'] = language_encoder.fit_transform(enriched['language'])
-enriched['category_idx'] = category_encoder.fit_transform(enriched['category'])
+interactions_df['user_idx'] = user_encoder.transform(interactions_df['user_id'])
+interactions_df['item_idx'] = item_encoder.fit_transform(interactions_df['audio_id'])
+interactions_df['language_idx'] = language_encoder.fit_transform(interactions_df['language'])
+interactions_df['category_idx'] = category_encoder.fit_transform(interactions_df['category'])
 
-print(f"Encoded {enriched['user_idx'].nunique()} users")
-print(f"Encoded {enriched['item_idx'].nunique()} items (audio IDs)")
-print(f"Encoded {enriched['language_idx'].nunique()} languages")
-print(f"Encoded {enriched['category_idx'].nunique()} categories\n")
+print(f"Encoded {len(user_encoder.classes_)} users (ALL USERS from both sources)")
+print(f"  - From users.csv: {len(all_user_ids)}")
+print(f"  - From interactions: {len(users_in_interactions)}")
+print(f"Encoded {interactions_df['item_idx'].nunique()} items")
+print(f"Encoded {interactions_df['language_idx'].nunique()} languages")
+print(f"Encoded {interactions_df['category_idx'].nunique()} categories\n")
 
-# Save ML interactions
-ml_interactions = enriched[['user_idx', 'item_idx', 'language_idx', 'category_idx', 'score']]
+print("STEP 10: CREATING ITEM METADATA LOOKUP")
+print("-"*80)
+
+item_metadata = interactions_df[['item_idx', 'audio_id', 'language_idx', 'category_idx']].drop_duplicates('item_idx')
+item_metadata = item_metadata.sort_values('item_idx').reset_index(drop=True)
+
+item_metadata.to_csv("data/processed/item_metadata.csv", index=False)
+print(f"Saved: data/processed/item_metadata.csv ({len(item_metadata)} items)\n")
+
+print("STEP 11: SAVING ML INTERACTIONS")
+print("-"*80)
+
+ml_interactions = interactions_df[['user_idx', 'item_idx', 'language_idx', 'category_idx', 'score']]
 ml_interactions.to_csv("data/processed/ml_interactions.csv", index=False)
-print(f"Saved to: data/processed/ml_interactions.csv\n")
 
-# ---------------- STEP 9: Save Encoders ----------------
-print("STEP 9: SAVING ENCODERS")
+print(f"Saved: data/processed/ml_interactions.csv\n")
+
+# ============================================================================
+# STEP 12: Save Encoders
+# ============================================================================
+print("STEP 12: SAVING ENCODERS")
 print("-"*80)
 
 Path("models_saved").mkdir(exist_ok=True)
 
 with open("models_saved/user_encoder.pkl", "wb") as f:
     pickle.dump(user_encoder, f)
-print("Saved user_encoder.pkl")
+print("Saved: models_saved/user_encoder.pkl")
 
 with open("models_saved/item_encoder.pkl", "wb") as f:
     pickle.dump(item_encoder, f)
-print("Saved item_encoder.pkl")
+print("Saved: models_saved/item_encoder.pkl")
 
 with open("models_saved/language_encoder.pkl", "wb") as f:
     pickle.dump(language_encoder, f)
-print("Saved language_encoder.pkl")
+print("Saved: models_saved/language_encoder.pkl")
 
 with open("models_saved/category_encoder.pkl", "wb") as f:
     pickle.dump(category_encoder, f)
-print("Saved category_encoder.pkl\n")
+print("Saved: models_saved/category_encoder.pkl\n")
 
-# ---------------- STEP 10: Build User Maps ----------------
-print("STEP 10: BUILDING USER PREFERENCE MAPS")
+print("STEP 13: CREATING USER PREFERENCE MAPS")
 print("-"*80)
 
 # User-Language Map
-user_lang_map = enriched.groupby('user_id')['language'].agg(
-    lambda x: x.value_counts().index[0]  # Most common language
+user_lang_map = interactions_df.groupby('user_id')['language'].agg(
+    lambda x: x.value_counts().index[0]
 ).reset_index()
 user_lang_map.columns = ['user_id', 'language_id']
 user_lang_map.to_csv("data/processed/user_language_map.csv", index=False)
-print("Saved user_language_map.csv")
+print("Saved: data/processed/user_language_map.csv")
 
 # User-Category Map
-user_cat_map = enriched.groupby('user_id')['category'].agg(
-    lambda x: x.value_counts().index[0]  # Most common category
+user_cat_map = interactions_df.groupby('user_id')['category'].agg(
+    lambda x: x.value_counts().index[0]
 ).reset_index()
 user_cat_map.columns = ['user_id', 'category']
 user_cat_map.to_csv("data/processed/user_category_map.csv", index=False)
-print("Saved user_category_map.csv")
+print("Saved: data/processed/user_category_map.csv")
 
 # User-Category Index
-user_cat_idx = enriched.groupby('user_idx')['category_idx'].agg(
-    lambda x: x.value_counts().index[0]  # Most common category index
+user_cat_idx = interactions_df.groupby('user_idx')['category_idx'].agg(
+    lambda x: x.value_counts().index[0]
 ).reset_index()
 user_cat_idx.columns = ['user_idx', 'category_idx']
 user_cat_idx.to_csv("data/processed/user_category_idx.csv", index=False)
-print("Saved user_category_idx.csv\n")
+print("Saved: data/processed/user_category_idx.csv\n")
 
-# ---------------- STEP 11: Summary ----------------
-print("="*80)
-print("REBUILD COMPLETE!")
-print("="*80 + "\n")
+print("STEP 14: CREATING COLD START USER LIST")
+print("-"*80)
+
+users_with_interactions = set(interactions_df['user_id'].unique())
+all_encoded_users = set(user_encoder.classes_)
+cold_start_users = list(all_encoded_users - users_with_interactions)
+
+cold_start_df = pd.DataFrame({
+    'user_id': cold_start_users,
+    'has_interactions': False
+})
+
+cold_start_df.to_csv("data/processed/cold_start_users.csv", index=False)
+print(f"Saved: data/processed/cold_start_users.csv ({len(cold_start_users)} users)\n")
+
 
 print("FINAL STATISTICS:")
-print(f"  • Total users: {enriched['user_idx'].nunique()}")
-print(f"  • Total items (audios): {enriched['item_idx'].nunique()}")
-print(f"  • Total languages: {enriched['language_idx'].nunique()}")
-print(f"  • Total categories: {enriched['category_idx'].nunique()}")
-print(f"  • Total interactions: {len(enriched)}")
-print(f"  • Real interactions: {len(interactions_df) if len(interactions_df) > 0 else 0}")
-print(f"    - From likes: {len(interactions_from_likes)}")
-print(f"    - From progress: {len(interactions_from_progress)}")
-print(f"    - From playlists: {len(interactions_from_playlists)}")
-print(f"  • Synthetic interactions: {len(synthetic_df)}")
+print(f"  • Total users in system: {len(user_encoder.classes_)}")
+print(f"  • Users with interactions (for training): {interactions_df['user_idx'].nunique()}")
+print(f"  • Cold start users (no interactions): {len(cold_start_users)}")
+print(f"  • Items: {interactions_df['item_idx'].nunique()}")
+print(f"  • Languages: {interactions_df['language_idx'].nunique()}")
+print(f"  • Categories: {interactions_df['category_idx'].nunique()}")
+print(f"  • Total interactions: {len(interactions_df)}")
 print()
 
-print("SCORE DISTRIBUTION IN FINAL DATA:")
-print(enriched['score'].value_counts().sort_index())
+print("SCORE DISTRIBUTION:")
+print(interactions_df['score'].value_counts().sort_index())
 print()
 
 print("FILES CREATED:")
-print("  • data/processed/audio_language_category.csv")
-print("  • data/processed/interactions.csv")
-print("  • data/processed/ml_interactions.csv")
-print("  • data/processed/user_language_map.csv")
-print("  • data/processed/user_category_map.csv")
-print("  • data/processed/user_category_idx.csv")
-print("  • models_saved/user_encoder.pkl")
-print("  • models_saved/item_encoder.pkl")
-print("  • models_saved/language_encoder.pkl")
-print("  • models_saved/category_encoder.pkl")
+print("  data/processed/audio_language_category.csv")
+print("  data/processed/interactions.csv")
+print("  data/processed/ml_interactions.csv")
+print("  data/processed/item_metadata.csv")
+print("  data/processed/user_language_map.csv")
+print("  data/processed/user_category_map.csv")
+print("  data/processed/user_category_idx.csv")
+print("  data/processed/cold_start_users.csv")
+print("  models_saved/user_encoder.pkl")
+print("  models_saved/item_encoder.pkl")
+print("  models_saved/language_encoder.pkl")
+print("  models_saved/category_encoder.pkl")
 print()
-
-print("NEXT STEPS:")
-print("  1. Run: python src/training/train_model.py")
-print("  2. Run: python src/test/visualize_recommendations.py")
-print()
-print("="*80 + "\n")
+print("You can now retrain the model with the updated data including all users.")

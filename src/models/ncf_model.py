@@ -2,79 +2,97 @@ import torch
 import torch.nn as nn
 
 
+class ImprovedNCF(nn.Module):
+    """
+    Improved Neural Collaborative Filtering with Content Features
+    Uses user, item, language, and category embeddings
+    """
+    def __init__(self, num_users, num_items, num_languages, num_categories, embedding_dim=64):
+
+        super().__init__()
+        
+        # Embedding layers
+        self.user_emb = nn.Embedding(num_users, embedding_dim)
+        self.item_emb = nn.Embedding(num_items, embedding_dim)
+        self.language_emb = nn.Embedding(num_languages, embedding_dim // 4)
+        self.category_emb = nn.Embedding(num_categories, embedding_dim // 4)
+        
+        # Calculate total input size
+        # user_emb (64) + item_emb (64) + language_emb (16) + category_emb (16) = 160
+        input_size = embedding_dim * 2 + (embedding_dim // 4) * 2
+        
+        # MLP layers with BatchNorm
+        self.fc = nn.Sequential(
+            nn.Linear(input_size, 256),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            
+            nn.Linear(256, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            
+            nn.Linear(128, 64),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            
+            nn.Linear(64, 1)
+        )
+        
+        # Initialize embeddings with normal distribution
+        nn.init.normal_(self.user_emb.weight, std=0.01)
+        nn.init.normal_(self.item_emb.weight, std=0.01)
+        nn.init.normal_(self.language_emb.weight, std=0.01)
+        nn.init.normal_(self.category_emb.weight, std=0.01)
+    
+    def forward(self, user, item, language, category):
+        """
+        Forward pass
+        
+        Args:
+            user: User indices [batch_size]
+            item: Item indices [batch_size]
+            language: Language indices [batch_size]
+            category: Category indices [batch_size]
+        
+        Returns:
+            predictions: Predicted scores [batch_size]
+        """
+        # Get embeddings
+        u = self.user_emb(user)       # [batch_size, embedding_dim]
+        i = self.item_emb(item)       # [batch_size, embedding_dim]
+        l = self.language_emb(language)  # [batch_size, embedding_dim//4]
+        c = self.category_emb(category)  # [batch_size, embedding_dim//4]
+        
+        # Concatenate all features
+        x = torch.cat([u, i, l, c], dim=1)  # [batch_size, input_size]
+        
+        # Pass through MLP
+        output = self.fc(x).squeeze()  # [batch_size]
+        
+        return output
+
+
 class NCF(nn.Module):
+    """
+    Original NCF Model (kept for backward compatibility)
+    """
+    
     def __init__(self, num_users, num_items, num_languages, num_categories, embedding_dim=32):
         super().__init__()
 
-        # User and Item embeddings
         self.user_emb = nn.Embedding(num_users, embedding_dim)
         self.item_emb = nn.Embedding(num_items, embedding_dim)
-
-        # Language and Category embeddings (smaller)
         self.language_emb = nn.Embedding(num_languages, embedding_dim // 2)
         self.category_emb = nn.Embedding(num_categories, embedding_dim // 2)
 
-        # Content feature network (combines item with its language/category)
         self.content_fc = nn.Sequential(
             nn.Linear(embedding_dim + (embedding_dim // 2) * 2, embedding_dim),
             nn.ReLU(),
             nn.Dropout(0.2)
         )
 
-        # Final prediction network
-        self.fc = nn.Sequential(
-            nn.Linear(embedding_dim * 2, 128),  # user_emb + content_emb
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, 1)
-        )
-
-    def forward(self, user, item, language, category):
-        # Get embeddings
-        u = self.user_emb(user)  # User preferences
-        i = self.item_emb(item)  # Item features
-        l = self.language_emb(language)  # Language features
-        c = self.category_emb(category)  # Category features
-
-        item_content = torch.cat([i, l, c], dim=1)
-        item_content = self.content_fc(item_content)
-
-        # Combine user preferences with content-aware item
-        x = torch.cat([u, item_content], dim=1)
-
-        return self.fc(x).squeeze()
-
-
-class ContentFilteredNCF(nn.Module):
-
-    def __init__(self, num_users, num_items, num_languages, num_categories, embedding_dim=32):
-        super().__init__()
-
-        self.user_emb = nn.Embedding(num_users, embedding_dim)
-        self.item_emb = nn.Embedding(num_items, embedding_dim)
-        self.language_emb = nn.Embedding(num_languages, embedding_dim // 2)
-        self.category_emb = nn.Embedding(num_categories, embedding_dim // 2)
-
-        # Store item metadata (will be set during training)
-        self.register_buffer('item_languages', torch.zeros(
-            num_items, dtype=torch.long))
-        self.register_buffer('item_categories', torch.zeros(
-            num_items, dtype=torch.long))
-
-        # Compatibility layers (checks if item matches query)
-        self.lang_compatibility = nn.Sequential(
-            nn.Linear(embedding_dim, 1),
-            nn.Sigmoid()
-        )
-
-        self.cat_compatibility = nn.Sequential(
-            nn.Linear(embedding_dim, 1),
-            nn.Sigmoid()
-        )
-
-        # Main prediction network
         self.fc = nn.Sequential(
             nn.Linear(embedding_dim * 2, 128),
             nn.ReLU(),
@@ -84,28 +102,15 @@ class ContentFilteredNCF(nn.Module):
             nn.Linear(64, 1)
         )
 
-    def set_item_metadata(self, item_languages, item_categories):
-        self.item_languages = item_languages
-        self.item_categories = item_categories
-
     def forward(self, user, item, language, category):
-        # Get base embeddings
         u = self.user_emb(user)
         i = self.item_emb(item)
         l = self.language_emb(language)
         c = self.category_emb(category)
 
-        # Get actual item metadata
-        item_lang = self.language_emb(self.item_languages[item])
-        item_cat = self.category_emb(self.item_categories[item])
+        item_content = torch.cat([i, l, c], dim=1)
+        item_content = self.content_fc(item_content)
 
-        lang_match = self.lang_compatibility(torch.abs(l - item_lang))
-        cat_match = self.cat_compatibility(torch.abs(c - item_cat))
+        x = torch.cat([u, item_content], dim=1)
 
-        # Combine user and item
-        x = torch.cat([u, i], dim=1)
-        base_score = self.fc(x).squeeze()
-
-        content_filter = (lang_match * cat_match).squeeze()
-
-        return base_score * content_filter
+        return self.fc(x).squeeze()
