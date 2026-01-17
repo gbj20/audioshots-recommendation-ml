@@ -125,25 +125,6 @@ if user_prefs:
     print(f"   Language Match: {lang_matches*10}%")
     print(f"   Category Match: {cat_matches*10}%")
 print(f"   Diversity: {diversity:.0f}%")
-print("  Solution: Boosts user preferences + penalizes popular items")
 
-print("\n" + "="*80)
-print("KEY IMPROVEMENTS:")
-print("="*80)
-print("""
-1. PREFERENCE BOOSTING:
-   - Items matching user's language get +2.0 boost
-   - Items matching user's category get +1.5 boost
-   - Result: 60-70% language match (was 0%)
 
-2. DIVERSITY PENALTY:
-   - Popular items get penalized
-   - Prevents same 19 items dominating all recommendations
-   - Result: 45-60% diversity (was 19%)
-
-3. HYBRID SCORING:
-   - 60% neural model predictions
-   - 40% user preference matching
-   - Result: Better relevance without sacrificing accuracy
-""")
 
