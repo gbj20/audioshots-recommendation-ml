@@ -2,12 +2,12 @@ import numpy as np
 import torch
 import pandas as pd
 import pickle
-from src.models.ncf_model import ImprovedNCF
 import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.append(str(PROJECT_ROOT))
+from src.models.ncf_model import ImprovedNCF
 
 MODEL_PATH = PROJECT_ROOT / "models_saved/recommender_improved.pt"
 DATA_PATH = PROJECT_ROOT / "data/processed/ml_interactions.csv"
