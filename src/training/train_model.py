@@ -12,11 +12,9 @@ sys.path.append(str(PROJECT_ROOT))
 
 from src.models.ncf_model import ImprovedNCF
 
-# Configuration - OPTIMIZED FOR SMALL DATA
 DATA_PATH = "data/processed/ml_interactions.csv"
 MODEL_PATH = "models_saved/recommender_improved.pt"
 
-BATCH_SIZE = 32  # Smaller batch for small data
 EPOCHS = 50 
 LEARNING_RATE = 0.0001  
 EMBEDDING_DIM = 64 
